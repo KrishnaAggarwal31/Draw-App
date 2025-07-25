@@ -7,6 +7,7 @@ import { prismaClient } from "@repo/db/client";
 //  
 
 const app = express();
+app.use(express.json());
 
 app.post("/signup", async(req, res) => {
     
@@ -19,7 +20,7 @@ app.post("/signup", async(req, res) => {
     }
 
     try {
-        await prismaClient.user.create({
+        const user = await prismaClient.user.create({
             data:{
                 email: parsedData.data?.username,
                 password: parsedData.data.password,
@@ -28,7 +29,7 @@ app.post("/signup", async(req, res) => {
         })
 
         res.json({
-            userId: "123"
+            userId: user.id
         })
     }catch(e){
         res.status(411).json({
@@ -38,7 +39,7 @@ app.post("/signup", async(req, res) => {
 
 })
 
-app.post("/signin", (req, res) =>{
+app.post("/signin", async(req, res) =>{
 
      const parsedData = SigninSchema.safeParse(req.body);
     if (!parsedData.success){
@@ -48,9 +49,22 @@ app.post("/signin", (req, res) =>{
         return;
     }
 
-    const userId = 1;
+    const user = await prismaClient.user.findFirst({
+        where:{
+            email: parsedData.data.username,
+            password: parsedData.data.password
+        }
+    })
+
+    if(!user){
+        res.status(403).json({
+            message:"Not authorised"
+        })
+        return;
+    }
+
     const token = jwt.sign({
-        userId
+        userId: user?.id
     }, JWT_SECRET);
 
     res.json({
@@ -59,7 +73,7 @@ app.post("/signin", (req, res) =>{
     
 })
 
-app.post("/room", middleware, (req, res) =>{
+app.post("/room", middleware, async(req, res) =>{
     const parsedData = CreateRoomSchema.safeParse(req.body);
     if (!parsedData.success){
         res.json({
@@ -67,11 +81,26 @@ app.post("/room", middleware, (req, res) =>{
         })
         return;
     }
+    // @ts-ignore: TODO: Fix this
+    const userId = req.userId;
 
-    res.json({
-        userId: 123
-    })
+    try{
+        const room = await prismaClient.room.create({
+            data:{
+                slug: parsedData.data.name,
+                adminId: userId
+            }
+        })
+
+        res.json({
+            roomId: room.id
+        })
+    } catch(e){
+        res.status(411).json({
+            message: "Room already exists with this name"
+        })
+    }
     
-})
+})  
 
 app.listen(3001);
